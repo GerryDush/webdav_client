@@ -239,13 +239,15 @@ class WdDio with DioMixin implements Dio {
     }
     return self.mkdirAll(parentPath, cancelToken);
   }
+  
 
   /// read a file with bytes
-  Future<List<int>> wdReadWithBytes(
+  Future<Uint8List> wdReadWithBytes(
     Client self,
     String path, {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
+    Range? range,
   }) async {
     // fix auth error
     var pResp = await this.wdOptions(self, path, cancelToken: cancelToken);
@@ -257,28 +259,36 @@ class WdDio with DioMixin implements Dio {
       self,
       'GET',
       path,
-      optionsHandler: (options) => options.responseType = ResponseType.bytes,
+      optionsHandler: (options) {
+        if (options.headers == null) {
+          options.headers = {};
+        }
+        if (range != null) {
+          options.headers!['range'] = range.toString();
+        }
+        options.responseType = ResponseType.bytes;
+      },
       onReceiveProgress: onProgress,
       cancelToken: cancelToken,
     );
-    if (resp.statusCode != 200) {
-      if (resp.statusCode != null) {
-        if (resp.statusCode! >= 300 && resp.statusCode! < 400) {
-          return (await this.req(
-            self,
-            'GET',
-            resp.headers["location"]!.first,
-            optionsHandler: (options) =>
-                options.responseType = ResponseType.bytes,
-            onReceiveProgress: onProgress,
-            cancelToken: cancelToken,
-          ))
-              .data;
-        }
-      }
-      throw newResponseError(resp);
+    if ([200, 206].contains(resp.statusCode)) {
+      return resp.data;
     }
-    return resp.data;
+    if (resp.statusCode != null) {
+      if (resp.statusCode! >= 300 && resp.statusCode! < 400) {
+        return (await this.req(
+          self,
+          'GET',
+          resp.headers["location"]!.first,
+          optionsHandler: (options) =>
+              options.responseType = ResponseType.bytes,
+          onReceiveProgress: onProgress,
+          cancelToken: cancelToken,
+        ))
+            .data;
+      }
+    }
+    throw newResponseError(resp);
   }
 
   /// read a file with stream

@@ -8,6 +8,26 @@ import 'utils.dart';
 import 'webdav_dio.dart';
 import 'xml.dart';
 
+class Range {
+  final int? start;
+  final int? end;
+
+  Range({this.start, this.end});
+
+  @override
+  String toString() {
+    if (start != null && end != null) {
+      return 'bytes=$start-$end';
+    } else if (start != null) {
+      return 'bytes=$start-';
+    } else if (end != null) {
+      return 'bytes=-$end';
+    } else {
+      return '';
+    }
+  }
+}
+
 /// WebDav Client
 class Client {
   /// WebDAV url
@@ -150,18 +170,32 @@ class Client {
     return this.c.wdCopyMove(this, oldPath, newPath, true, overwrite);
   }
 
+  Future<int> readContentLength(String path, [CancelToken? cancelToken]) async {
+    var resp = await this.c.req(this, 'HEAD', path, cancelToken: cancelToken);
+    if (resp.statusCode == 200) {
+      var lengthStr = resp.headers.value('content-length');
+      if (lengthStr != null) {
+        return int.parse(lengthStr);
+      }
+      return -1;
+    }
+    throw newResponseError(resp);
+  }
+
   /// Read the bytes of a file
   /// It is best not to open debug mode, otherwise the byte data is too large and the output results in IDE cards, 😄
-  Future<List<int>> read(
+  Future<Uint8List> read(
     String path, {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
+    Range? range,
   }) {
     return this.c.wdReadWithBytes(
           this,
           path,
           onProgress: onProgress,
           cancelToken: cancelToken,
+          range: range,
         );
   }
 
